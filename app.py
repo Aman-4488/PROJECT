@@ -127,7 +127,7 @@ if run:
 
             name = "Unknown"
 
-            if len(known_embeddings):
+            if known_embeddings.size:
                 dists = np.linalg.norm(known_embeddings - embedding, axis=1)
                 idx = np.argmin(dists)
 
