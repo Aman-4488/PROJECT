@@ -8,6 +8,8 @@ import os
 MODEL_DIR = "models"
 KNOWN_FACES_DIR = "known_faces"
 THRESHOLD = 0.6
+DLIB_LANDMARK_COUNT = 68
+EPSILON_AVOID_ZERO_DIVISION = 1e-6
 # Emotion heuristic thresholds tuned for webcam framing with dlib landmarks.
 # They are normalized against face geometry to keep behavior stable across scales.
 EMOTION_OPEN_MOUTH_THRESHOLD = 0.38
@@ -47,14 +49,15 @@ known_embeddings = (
 
 
 def detect_emotion(shape):
-    points = np.array([(shape.part(i).x, shape.part(i).y) for i in range(68)], dtype=np.float32)
+    points = np.array([(shape.part(i).x, shape.part(i).y) for i in range(DLIB_LANDMARK_COUNT)], dtype=np.float32)
 
-    face_width = np.linalg.norm(points[16] - points[0]) + 1e-6
-    face_height = np.linalg.norm(points[8] - points[27]) + 1e-6
-    mouth_width = np.linalg.norm(points[54] - points[48]) + 1e-6
+    face_width = np.linalg.norm(points[16] - points[0]) + EPSILON_AVOID_ZERO_DIVISION
+    face_height = np.linalg.norm(points[8] - points[27]) + EPSILON_AVOID_ZERO_DIVISION
+    mouth_width = np.linalg.norm(points[54] - points[48]) + EPSILON_AVOID_ZERO_DIVISION
     mouth_open = np.linalg.norm(points[66] - points[62])
     smile_ratio = mouth_width / face_width
     mouth_open_ratio = mouth_open / mouth_width
+    # 48/54 are mouth corners and 51 is upper-lip center in the dlib 68-point scheme.
     corner_drop = (((points[48][1] + points[54][1]) / 2) - points[51][1]) / face_height
 
     if mouth_open_ratio > EMOTION_OPEN_MOUTH_THRESHOLD:
