@@ -8,6 +8,13 @@ import os
 MODEL_DIR = "models"
 KNOWN_FACES_DIR = "known_faces"
 THRESHOLD = 0.6
+# Emotion heuristic thresholds tuned for webcam framing with dlib landmarks.
+# They are normalized against face geometry to keep behavior stable across scales.
+EMOTION_OPEN_MOUTH_THRESHOLD = 0.38
+EMOTION_SMILE_THRESHOLD = 0.42
+EMOTION_HAPPY_CORNER_DROP_MAX = 0.015
+EMOTION_SAD_CORNER_DROP_MIN = 0.03
+EMOTION_SAD_SMILE_MAX = 0.40
 
 os.makedirs(KNOWN_FACES_DIR, exist_ok=True)
 
@@ -32,6 +39,12 @@ for name in os.listdir(KNOWN_FACES_DIR):
             known_embeddings.append(emb)
             known_names.append(name)
 
+known_embeddings = (
+    np.array(known_embeddings, dtype=np.float32)
+    if known_embeddings
+    else np.empty((0, 128), dtype=np.float32)
+)
+
 
 def detect_emotion(shape):
     points = np.array([(shape.part(i).x, shape.part(i).y) for i in range(68)], dtype=np.float32)
@@ -44,11 +57,11 @@ def detect_emotion(shape):
     mouth_open_ratio = mouth_open / mouth_width
     corner_drop = (((points[48][1] + points[54][1]) / 2) - points[51][1]) / face_height
 
-    if mouth_open_ratio > 0.38:
+    if mouth_open_ratio > EMOTION_OPEN_MOUTH_THRESHOLD:
         return "Surprised"
-    if smile_ratio > 0.42 and corner_drop < 0.015:
+    if smile_ratio > EMOTION_SMILE_THRESHOLD and corner_drop < EMOTION_HAPPY_CORNER_DROP_MAX:
         return "Happy"
-    if corner_drop > 0.03 and smile_ratio < 0.40:
+    if corner_drop > EMOTION_SAD_CORNER_DROP_MIN and smile_ratio < EMOTION_SAD_SMILE_MAX:
         return "Sad"
     return "Neutral"
 
@@ -85,9 +98,8 @@ if run:
 
             name = "Unknown"
 
-            if known_embeddings:
-                known_embeddings_array = np.array(known_embeddings)
-                dists = np.linalg.norm(known_embeddings_array - embedding, axis=1)
+            if len(known_embeddings):
+                dists = np.linalg.norm(known_embeddings - embedding, axis=1)
                 idx = np.argmin(dists)
 
                 if dists[idx] < THRESHOLD:
@@ -101,7 +113,7 @@ if run:
                 file_id = len(os.listdir(person_path))
                 np.save(os.path.join(person_path, f"{file_id}.npy"), embedding)
 
-                known_embeddings.append(embedding)
+                known_embeddings = np.vstack([known_embeddings, embedding])
                 known_names.append(name_input)
 
                 name = name_input
