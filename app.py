@@ -8,7 +8,6 @@ import os
 MODEL_DIR = "models"
 KNOWN_FACES_DIR = "known_faces"
 THRESHOLD = 0.6
-DLIB_LANDMARK_COUNT = 68
 EPSILON_AVOID_ZERO_DIVISION = 1e-6
 # Emotion heuristic thresholds tuned for webcam framing with dlib landmarks.
 # They are normalized against face geometry to keep behavior stable across scales.
@@ -26,6 +25,17 @@ LANDMARK_UPPER_LIP_CENTER = 51
 LANDMARK_MOUTH_RIGHT = 54
 LANDMARK_INNER_UPPER_LIP = 62
 LANDMARK_INNER_LOWER_LIP = 66
+REQUIRED_EMOTION_LANDMARKS = (
+    LANDMARK_JAW_LEFT,
+    LANDMARK_CHIN,
+    LANDMARK_JAW_RIGHT,
+    LANDMARK_NOSE_BRIDGE_TOP,
+    LANDMARK_MOUTH_LEFT,
+    LANDMARK_UPPER_LIP_CENTER,
+    LANDMARK_MOUTH_RIGHT,
+    LANDMARK_INNER_UPPER_LIP,
+    LANDMARK_INNER_LOWER_LIP,
+)
 
 os.makedirs(KNOWN_FACES_DIR, exist_ok=True)
 
@@ -58,23 +68,23 @@ known_embeddings = (
 
 
 def detect_emotion(shape):
-    points = np.empty((DLIB_LANDMARK_COUNT, 2), dtype=np.float32)
-    for i in range(DLIB_LANDMARK_COUNT):
-        part = shape.part(i)
-        points[i] = (part.x, part.y)
+    points = {}
+    for idx in REQUIRED_EMOTION_LANDMARKS:
+        part = shape.part(idx)
+        points[idx] = np.array([part.x, part.y], dtype=np.float32)
 
-    face_width = np.linalg.norm(points[LANDMARK_JAW_RIGHT] - points[LANDMARK_JAW_LEFT]) + EPSILON_AVOID_ZERO_DIVISION
-    face_height = np.linalg.norm(points[LANDMARK_CHIN] - points[LANDMARK_NOSE_BRIDGE_TOP]) + EPSILON_AVOID_ZERO_DIVISION
-    mouth_width = np.linalg.norm(points[LANDMARK_MOUTH_RIGHT] - points[LANDMARK_MOUTH_LEFT]) + EPSILON_AVOID_ZERO_DIVISION
+    face_width = np.linalg.norm(points[LANDMARK_JAW_RIGHT] - points[LANDMARK_JAW_LEFT])
+    face_height = np.linalg.norm(points[LANDMARK_CHIN] - points[LANDMARK_NOSE_BRIDGE_TOP])
+    mouth_width = np.linalg.norm(points[LANDMARK_MOUTH_RIGHT] - points[LANDMARK_MOUTH_LEFT])
     mouth_open = np.linalg.norm(points[LANDMARK_INNER_LOWER_LIP] - points[LANDMARK_INNER_UPPER_LIP])
-    smile_ratio = mouth_width / face_width
-    mouth_open_ratio = mouth_open / mouth_width
+    smile_ratio = mouth_width / max(face_width, EPSILON_AVOID_ZERO_DIVISION)
+    mouth_open_ratio = mouth_open / max(mouth_width, EPSILON_AVOID_ZERO_DIVISION)
     # Measures how far mouth corners droop below the upper-lip center relative to face height.
     corner_drop = (
         (
             (points[LANDMARK_MOUTH_LEFT][1] + points[LANDMARK_MOUTH_RIGHT][1]) / 2
         ) - points[LANDMARK_UPPER_LIP_CENTER][1]
-    ) / face_height
+    ) / max(face_height, EPSILON_AVOID_ZERO_DIVISION)
 
     if mouth_open_ratio > EMOTION_OPEN_MOUTH_THRESHOLD:
         return "Surprised"
