@@ -17,6 +17,15 @@ EMOTION_SMILE_THRESHOLD = 0.42
 EMOTION_HAPPY_CORNER_DROP_MAX = 0.015
 EMOTION_SAD_CORNER_DROP_MIN = 0.03
 EMOTION_SAD_SMILE_MAX = 0.40
+LANDMARK_JAW_LEFT = 0
+LANDMARK_CHIN = 8
+LANDMARK_JAW_RIGHT = 16
+LANDMARK_NOSE_BRIDGE_TOP = 27
+LANDMARK_MOUTH_LEFT = 48
+LANDMARK_UPPER_LIP_CENTER = 51
+LANDMARK_MOUTH_RIGHT = 54
+LANDMARK_INNER_UPPER_LIP = 62
+LANDMARK_INNER_LOWER_LIP = 66
 
 os.makedirs(KNOWN_FACES_DIR, exist_ok=True)
 
@@ -49,16 +58,23 @@ known_embeddings = (
 
 
 def detect_emotion(shape):
-    points = np.array([(shape.part(i).x, shape.part(i).y) for i in range(DLIB_LANDMARK_COUNT)], dtype=np.float32)
+    points = np.empty((DLIB_LANDMARK_COUNT, 2), dtype=np.float32)
+    for i in range(DLIB_LANDMARK_COUNT):
+        part = shape.part(i)
+        points[i] = (part.x, part.y)
 
-    face_width = np.linalg.norm(points[16] - points[0]) + EPSILON_AVOID_ZERO_DIVISION
-    face_height = np.linalg.norm(points[8] - points[27]) + EPSILON_AVOID_ZERO_DIVISION
-    mouth_width = np.linalg.norm(points[54] - points[48]) + EPSILON_AVOID_ZERO_DIVISION
-    mouth_open = np.linalg.norm(points[66] - points[62])
+    face_width = np.linalg.norm(points[LANDMARK_JAW_RIGHT] - points[LANDMARK_JAW_LEFT]) + EPSILON_AVOID_ZERO_DIVISION
+    face_height = np.linalg.norm(points[LANDMARK_CHIN] - points[LANDMARK_NOSE_BRIDGE_TOP]) + EPSILON_AVOID_ZERO_DIVISION
+    mouth_width = np.linalg.norm(points[LANDMARK_MOUTH_RIGHT] - points[LANDMARK_MOUTH_LEFT]) + EPSILON_AVOID_ZERO_DIVISION
+    mouth_open = np.linalg.norm(points[LANDMARK_INNER_LOWER_LIP] - points[LANDMARK_INNER_UPPER_LIP])
     smile_ratio = mouth_width / face_width
     mouth_open_ratio = mouth_open / mouth_width
-    # 48/54 are mouth corners and 51 is upper-lip center in the dlib 68-point scheme.
-    corner_drop = (((points[48][1] + points[54][1]) / 2) - points[51][1]) / face_height
+    # Measures how far mouth corners droop below the upper-lip center relative to face height.
+    corner_drop = (
+        (
+            (points[LANDMARK_MOUTH_LEFT][1] + points[LANDMARK_MOUTH_RIGHT][1]) / 2
+        ) - points[LANDMARK_UPPER_LIP_CENTER][1]
+    ) / face_height
 
     if mouth_open_ratio > EMOTION_OPEN_MOUTH_THRESHOLD:
         return "Surprised"
