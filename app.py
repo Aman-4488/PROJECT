@@ -32,6 +32,26 @@ for name in os.listdir(KNOWN_FACES_DIR):
             known_embeddings.append(emb)
             known_names.append(name)
 
+
+def detect_emotion(shape):
+    points = np.array([(shape.part(i).x, shape.part(i).y) for i in range(68)], dtype=np.float32)
+
+    face_width = np.linalg.norm(points[16] - points[0]) + 1e-6
+    face_height = np.linalg.norm(points[8] - points[27]) + 1e-6
+    mouth_width = np.linalg.norm(points[54] - points[48]) + 1e-6
+    mouth_open = np.linalg.norm(points[66] - points[62])
+    smile_ratio = mouth_width / face_width
+    mouth_open_ratio = mouth_open / mouth_width
+    corner_drop = (((points[48][1] + points[54][1]) / 2) - points[51][1]) / face_height
+
+    if mouth_open_ratio > 0.38:
+        return "Surprised"
+    if smile_ratio > 0.42 and corner_drop < 0.015:
+        return "Happy"
+    if corner_drop > 0.03 and smile_ratio < 0.40:
+        return "Sad"
+    return "Neutral"
+
 # ---------------- STREAMLIT UI ----------------
 st.set_page_config(page_title="Face Recognition", layout="wide")
 st.title("🔴 Real-Time Face Recognition (Dlib)")
@@ -61,11 +81,13 @@ if run:
 
             shape = sp(rgb, face)
             embedding = np.array(facerec.compute_face_descriptor(rgb, shape))
+            emotion = detect_emotion(shape)
 
             name = "Unknown"
 
             if known_embeddings:
-                dists = np.linalg.norm(known_embeddings - embedding, axis=1)
+                known_embeddings_array = np.array(known_embeddings)
+                dists = np.linalg.norm(known_embeddings_array - embedding, axis=1)
                 idx = np.argmin(dists)
 
                 if dists[idx] < THRESHOLD:
@@ -87,8 +109,9 @@ if run:
 
             # -------- DRAW RECTANGLE --------
             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
+            label = f"{name} | {emotion}"
             cv2.putText(
-                frame, name, (x1, y1 - 10),
+                frame, label, (x1, y1 - 10),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2
             )
 
